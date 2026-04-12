@@ -1,0 +1,16 @@
+[project]
+name = "phase-mirror-mvp"
+version = "0.1.0"
+description = "Phase Mirror MVP governance daemon with Redis-based coupling and governance ledger."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.112.0",
+    "uvicorn[standard]>=0.23.0",
+    "pydantic>=2.9.0",
+    "PyYAML>=6.0",
+    "redis>=5.0.0",
+]
+
+[project.urls]
+"Source" = "https://github.com/MultiplicityFoundation/PhaseMirror-HQ"

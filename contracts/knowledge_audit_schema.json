@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Multiplicity Knowledge Audit Entry",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["timestamp", "article_id", "status", "details"],
+    "properties": {
+      "timestamp": { "type": "number" },
+      "article_id": { "type": "string" },
+      "status": { "type": "string", "enum": ["success", "error"] },
+      "details": { "type": "string" },
+      "engine_result": { "type": "object" }
+    },
+    "additionalProperties": false
+  }
+}

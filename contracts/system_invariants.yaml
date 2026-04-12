@@ -1,0 +1,71 @@
+# contracts/system_invariants.yaml
+# Per ADR-012: List of immutable files whose Merkle root forms the root of trust
+#
+# These files can only be modified via:
+# 1. Governance action that computes a new Merkle root
+# 2. New root is committed to ledger as a LedgerEntry with signature
+# 3. GOVERNANCE_MERKLE_ROOT_TX_ID is updated
+# 4. Daemon restarts and verifies new root
+
+governance_version: "v0.1.0"
+immutable_files:
+  # Core governance and trust anchors
+  - contracts/shared/constants.py
+  - contracts/system_invariants.yaml
+  
+  # Policy and governance vocabulary
+  - policy/phase_mirror/__init__.py
+  - policy/phase_mirror/tension_vocab.yaml
+  
+  # Emergency controls
+  - rollback/kill_switch.py
+  
+  # Tool and MCP server integrity
+  - mcp_server/server.py
+  - mcp_server/tool_registry.yaml
+  - mcp_server/middleware/auth.py
+  
+  # Cannot add more files without governance action and new Merkle root
+
+governance_critical_tools:
+  - mcp_server/tools/tool_phase_mirror.py
+  - mcp_server/tools/tool_daemon_heartbeat.py
+  - mcp_server/tools/tool_daemon_epsilon_adjust.py
+  - mcp_server/tools/tool_checkpoint_write.py
+  - mcp_server/tools/tool_rollback_execute.py
+  - mcp_server/tools/tool_surface_levers.py
+  - mcp_server/tools/tool_create_lever_branch.py
+  - mcp_server/tools/tool_certify_lever_convergence.py
+  - mcp_server/tools/tool_deploy_authorization.py
+  - mcp_server/tools/tool_remove_lever_branch.py
+  - mcp_server/tools/tool_multiplicity_create_article.py
+  - mcp_server/tools/tool_multiplicity_validate_article.py
+  - mcp_server/tools/tool_multiplicity_execute_article.py
+
+multiplicity_kb_invariants:
+  max_recursion_depth: 3
+  default_status: "draft"
+  audited_actions: ["validate", "execute", "update"]
+  pirtm_mode_enabled: true
+  pirtm_quality_threshold: ">=0.98"
+  # PM-2462 / ADR-075: PIRTM runtime bounds (daemon + engine enforcement)
+  pirtm_lower_bound: 0.0
+  pirtm_spectral_radius_max: 1.0
+  pirtm_lphi_threshold: 0.9
+  pirtm_gas_limit: 10000
+  pirtm_audit_cost: 1
+  pirtm_trace_lock: false
+
+  # PM-2500 / ADR-079: Ξ-Constitution integration
+  xi_constitution_version: "1.0.0"
+  xi_genesis_seal: "91151220b4d8b1e7e5ec0f3659d92e5ae8122e39bb6ab79a2496cd18e0c94927"
+  xi_psi_composition: ["PIRTM", "CSL", "Langlands", "Attestation", "DriftAudit"]
+
+# Scope note: dynamic state data (state/knowledge_audit.json) is not in immutable file set,
+# but it is governed by the audit schema and runtime validation agent.
+
+# NOTE: This file is self-referential (contains itself in the immutable list),
+# but this is NOT a paradox:
+# - The SHA256(system_invariants.yaml) is computed and included in the Merkle tree
+# - The Merkle ROOT is what's stored in the ledger, not the individual hash
+# - The root is external to all files, breaking the self-reference loop

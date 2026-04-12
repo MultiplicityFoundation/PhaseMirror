@@ -1,0 +1,58 @@
+# contracts/analog_sovereignty.yaml
+# Analog Sovereignty Protocol — Article V
+# ADR-085 (PM-2507): Machine-readable consent requirements for analog integration gates
+#
+# This file is the normative specification for checkAnalogSovereignty().
+# Changes require governance action (two-party sign-off per ADR-086).
+
+analog_sovereignty_version: "1.0.0"
+constitutional_article: V
+default_posture: SILENT
+
+# These checks must all pass when analog_integration = true
+consent_requirements:
+  - field: consent_attest
+    operator: "present"
+    description: "A consent attestation object must exist (fail-closed if absent)"
+    fail_mode: BLOCK
+
+  - field: consent_attest.valid
+    operator: "="
+    value: true
+    description: "Attestation must be marked valid"
+    fail_mode: BLOCK
+
+  - field: consent_attest.revoked
+    operator: "="
+    value: false
+    description: "Attestation must not be revoked"
+    fail_mode: BLOCK
+
+  - field: consent_attest.scope
+    operator: "covers"
+    value: "operation.scope"
+    description: "Consent scope must cover all operation scope requirements"
+    fail_mode: BLOCK
+
+non_extractive_requirement:
+  description: >
+    No model artifact referencing the analog source may persist beyond
+    the bounded execution window. All intermediate representations must
+    be zero-copy and ephemeral.
+  forbidden_steps:
+    - persist_embedding
+    - train_on_source
+    - snapshot_analog
+    - index_analog
+    - replicate_identity
+  enforcement: runtime_check
+  fail_mode: BLOCK
+
+silence_default:
+  description: >
+    If analog_integration_flag is absent → treat as analog_integration_flag = false
+    (digital-only, no consent gate required).
+    If analog_integration_flag = true AND consent_attest not found → BLOCKED.
+
+amendment_threshold: "two-thirds governance vote"
+amendment_script: "scripts/xi-amend.mjs"

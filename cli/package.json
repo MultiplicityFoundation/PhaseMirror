@@ -1,0 +1,26 @@
+{
+  "name": "@phase-mirror/mvp-cli",
+  "version": "0.1.0",
+  "description": "Phase Mirror MVP CLI analyzer entrypoint.",
+  "main": "./dist/index.js",
+  "bin": {
+    "phase-mirror": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "echo \"No CLI tests defined yet\"",
+    "clean": "rm -rf dist"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

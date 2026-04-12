@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://phase-mirror.dev/schemas/pirtm/proof_schema.json",
+  "title": "PirtmProof",
+  "description": "Schema for a PIRTM transpile-time proof packet stored in the !pirtm_proof binary section. PM-2460 / ADR-073.",
+  "type": "object",
+  "required": ["proof", "primeIndex", "epsilon", "opNormT", "proofHash", "publicSignals"],
+  "additionalProperties": false,
+  "properties": {
+    "proof": {
+      "type": "string",
+      "description": "0x-prefixed SHA-256 hex digest binding prime_index to tensor body",
+      "pattern": "^0x[0-9a-fA-F]{64}$"
+    },
+    "primeIndex": {
+      "type": "integer",
+      "description": "CRT prime index identifying the module's residue class",
+      "minimum": 1
+    },
+    "epsilon": {
+      "type": "number",
+      "description": "Contraction factor ε — must be in (0, 1)",
+      "exclusiveMinimum": 0,
+      "exclusiveMaximum": 1
+    },
+    "opNormT": {
+      "type": "number",
+      "description": "Operator norm of the transition tensor T; op_norm_T * epsilon must be < 1",
+      "exclusiveMinimum": 0
+    },
+    "proofHash": {
+      "type": "string",
+      "description": "SHA-256 hex of (prime_index|epsilon|op_norm_T) — proof-of-binding, 64 hex chars",
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "publicSignals": {
+      "type": "object",
+      "description": "Arbitrary key-value public signals emitted alongside the proof",
+      "properties": {
+        "digest": { "type": "string" },
+        "primeIndex": { "type": "integer" },
+        "epsilon": { "type": "number" },
+        "opNormT": { "type": "number" },
+        "certified": { "type": "boolean" }
+      }
+    }
+  },
+  "if": {
+    "required": ["opNormT", "epsilon"]
+  },
+  "then": {
+    "description": "Contractivity invariant: op_norm_T * epsilon < 1 (enforced in code, documented here)"
+  }
+}

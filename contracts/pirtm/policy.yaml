@@ -1,0 +1,147 @@
+# contracts/pirtm/policy.yaml
+# PIRTM production rollout policy
+# PM-2464 / ADR-077
+#
+# This file governs:
+#   - canary traffic distribution
+#   - rollback conditions
+#   - monitoring thresholds
+#   - per-environment gate requirements
+#
+# Changes to this file require governance action (same as system_invariants.yaml).
+
+version: "1.0.0"
+effective_date: "2026-03-20"
+epic: "PM-2451"
+story: "PM-2464"
+
+# ---------------------------------------------------------------------------
+# Traffic gates
+# ---------------------------------------------------------------------------
+traffic:
+  # Canary: send this fraction of pirtm-mode articles through the new path
+  canary_fraction: 0.10
+  # Ramp policy: increase canary_fraction by step_size every interval_hours
+  # if error_rate stays below error_rate_threshold and p50_latency_ms stays below latency_threshold_ms
+  ramp:
+    step_size: 0.10
+    interval_hours: 24
+    error_rate_threshold: 0.005   # 0.5 %
+    latency_threshold_ms: 150
+  # Full rollout fraction (once canary passes all gates)
+  production_fraction: 1.0
+
+# ---------------------------------------------------------------------------
+# Rollback conditions (any one triggers automatic rollback)
+# ---------------------------------------------------------------------------
+rollback_triggers:
+  - name: error_rate_spike
+    condition: "error_rate_1m > 0.02"   # 2 % sustained over 1 minute
+    action: revert_canary
+  - name: lphi_breach_rate
+    condition: "pirtm_lphi_breach_count_5m > 5"
+    action: revert_canary
+  - name: noncontractive_rate
+    condition: "pirtm_noncontractive_count_5m > 3"
+    action: revert_canary
+  - name: p99_latency
+    condition: "p99_latency_ms > 500"
+    action: revert_canary
+  - name: proof_cert_failure
+    condition: "pirtm_cert_failure_count_5m > 0"
+    action: full_rollback   # cert failures are always fatal
+
+# ---------------------------------------------------------------------------
+# Monitoring thresholds (Prometheus / cloud metrics)
+# ---------------------------------------------------------------------------
+monitoring:
+  metrics:
+    - name: pirtm_proof_certified_total
+      type: counter
+      description: "Total PIRTM proofs successfully certified"
+      alert:
+        condition: "rate(pirtm_proof_certified_total[5m]) == 0"
+        severity: warning
+        message: "PIRTM proof throughput dropped to zero"
+
+    - name: pirtm_lphi_breach_total
+      type: counter
+      description: "Total PIRTM L(Phi) breach events"
+      alert:
+        condition: "rate(pirtm_lphi_breach_total[5m]) > 1"
+        severity: critical
+        message: "PIRTM L(Phi) breach rate exceeding 1/min"
+
+    - name: pirtm_noncontractive_total
+      type: counter
+      description: "Total PIRTM non-contractive session events"
+      alert:
+        condition: "rate(pirtm_noncontractive_total[5m]) > 0"
+        severity: critical
+        message: "PIRTM non-contractive session detected"
+
+    - name: pirtm_spectral_radius
+      type: gauge
+      description: "Current session gain matrix spectral radius (∞-norm bound)"
+      alert:
+        condition: "pirtm_spectral_radius >= 0.95"
+        severity: warning
+        message: "PIRTM spectral radius approaching contractivity limit"
+
+    - name: pirtm_epsilon
+      type: gauge
+      description: "Current module epsilon (contraction factor)"
+
+    - name: pirtm_op_norm_t
+      type: gauge
+      description: "Current module operator norm of T"
+
+  # SLO targets
+  slos:
+    proof_cert_success_rate: 0.9999   # 99.99 %
+    p99_latency_ms: 200
+    error_rate_max: 0.001             # 0.1 %
+
+# ---------------------------------------------------------------------------
+# Environment-specific gate requirements
+# ---------------------------------------------------------------------------
+environments:
+  local:
+    pirtm_mode_enabled: true
+    require_certified_proof: false   # stubs acceptable
+    canary_fraction: 1.0
+    rollback_on_error: false
+
+  staging:
+    pirtm_mode_enabled: true
+    require_certified_proof: true
+    canary_fraction: 1.0
+    rollback_on_error: true
+    gate_required: "Gate-C"
+
+  production:
+    pirtm_mode_enabled: true
+    require_certified_proof: true
+    canary_fraction: 0.10            # start with 10 % canary
+    rollback_on_error: true
+    gate_required: "Gate-D"
+    human_approval_required: true    # requires sign-off before full traffic
+
+# ---------------------------------------------------------------------------
+# Recovery procedures
+# ---------------------------------------------------------------------------
+recovery:
+  revert_canary:
+    steps:
+      - "Set traffic.canary_fraction = 0"
+      - "Alert on-call via PagerDuty P2"
+      - "Create incident ticket with pirtm_spectral_radius and lphi snapshot"
+      - "Investigate watchdog trigger logs in state/knowledge_audit.json"
+
+  full_rollback:
+    steps:
+      - "Set traffic.canary_fraction = 0 AND traffic.production_fraction = 0"
+      - "Alert on-call via PagerDuty P1"
+      - "Engage daemon kill-switch if cert failures persist"
+      - "Restore last known-good checkpoint via: python scripts/pirtm/rollback_check.py --execute"
+      - "File post-mortem within 24 hours"

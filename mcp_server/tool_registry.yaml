@@ -1,0 +1,256 @@
+schema_version: "1.0"
+server_name: "tooling-pmd"
+governance_version: "v0.1.0"
+registry_mode: "wave-3"
+
+tools:
+  - name: "health_check"
+    module: "mcp_server.tools.tool_health_check"
+    callable: "health_check"
+    file: "mcp_server/tools/tool_health_check.py"
+    description: "Check that canonical PMD roots, runtime surfaces, and Wave 3 organ indexes exist."
+    inputs: []
+    output: "HealthReport"
+
+  - name: "daemon_heartbeat"
+    module: "mcp_server.tools.tool_daemon_heartbeat"
+    callable: "daemon_heartbeat"
+    file: "mcp_server/tools/tool_daemon_heartbeat.py"
+    description: "Execute the canonical daemon heartbeat and optionally evaluate runtime rollback triggers."
+    verify_integrity: true
+    critical: true
+    inputs: ["label?", "L_Phi?", "consecutive_failures?", "fail_rate_60s?", "operator_halt?"]
+    output: "DaemonHeartbeatReport"
+
+  - name: "daemon_epsilon_adjust"
+    module: "mcp_server.tools.tool_daemon_epsilon_adjust"
+    callable: "daemon_epsilon_adjust"
+    file: "mcp_server/tools/tool_daemon_epsilon_adjust.py"
+    description: "Apply a circuit-safe runtime epsilon adjustment through the canonical daemon watchdog."
+    verify_integrity: true
+    critical: true
+    rate_limit: "1_per_30s"
+    max_delta: 0.02
+    cumulative_cap_10min: 0.10
+    requires: ["watchdog_trigger"]
+    bypasses_phase_mirror_gate: true
+    inputs: ["delta", "reason?"]
+    output: "DaemonEpsilonAdjustReport"
+
+  - name: "epsilon_adjust"
+    module: "mcp_server.tools.tool_epsilon_adjust"
+    callable: "epsilon_adjust"
+    file: "mcp_server/tools/tool_epsilon_adjust.py"
+    description: "Fast-path epsilon adjustment without full self-upgrade cycle."
+    verify_integrity: false
+    critical: true
+    rate_limit: "1_per_30s"
+    max_delta: 0.02
+    cumulative_cap_10min: 0.10
+    requires: ["watchdog_trigger"]
+    bypasses_phase_mirror_gate: true
+    audit: true
+    inputs: ["delta_epsilon", "reason?"]
+    output: "ConfigReport"
+
+  - name: "manifest_status"
+    module: "mcp_server.tools.tool_manifest_status"
+    callable: "manifest_status"
+    file: "mcp_server/tools/tool_manifest_status.py"
+    description: "Read the MCP manifest and return a compact PMD ownership summary."
+    inputs: []
+    output: "ManifestReport"
+
+  - name: "phase_mirror"
+    module: "mcp_server.tools.tool_phase_mirror"
+    callable: "phase_mirror"
+    file: "mcp_server/tools/tool_phase_mirror.py"
+    description: "Run a request through the Tooling-owned Phase Mirror policy stub."
+    verify_integrity: true
+    critical: true
+    inputs: ["input_text", "output_expr", "context_json?"]
+    output: "DissonanceReport"
+
+  - name: "agent_dispatch"
+    module: "mcp_server.tools.tool_agent_dispatch"
+    callable: "agent_dispatch"
+    file: "mcp_server/tools/tool_agent_dispatch.py"
+    description: "Dispatch an AGENTS.md-declared agent through explicit MCP tool wrappers."
+    inputs: ["agent_id", "task", "wrapper_name?"]
+    output: "AgentDispatchReport"
+
+  - name: "checkpoint_write"
+    module: "mcp_server.tools.tool_checkpoint_write"
+    callable: "checkpoint_write"
+    file: "mcp_server/tools/tool_checkpoint_write.py"
+    description: "Create an explicit rollback checkpoint before self-modification."
+    verify_integrity: true
+    critical: true
+    inputs: ["label?", "governance_version?", "ledger_reference?", "metadata_json?"]
+    output: "CheckpointWriteReport"
+
+  - name: "checkpoint_inventory"
+    module: "mcp_server.tools.tool_checkpoint_inventory"
+    callable: "checkpoint_inventory"
+    file: "mcp_server/tools/tool_checkpoint_inventory.py"
+    description: "List checkpoint inventory and retention tiers through the MCP nervous system."
+    inputs: ["limit?"]
+    output: "CheckpointInventoryReport"
+
+  - name: "checkpoint_prune"
+    module: "mcp_server.tools.tool_checkpoint_prune"
+    callable: "checkpoint_prune"
+    file: "mcp_server/tools/tool_checkpoint_prune.py"
+    description: "Prune checkpoint inventory according to the rollback retention policy."
+    inputs: ["dry_run?"]
+    output: "CheckpointPruneReport"
+
+  - name: "ledger_query"
+    module: "mcp_server.tools.tool_ledger_query"
+    callable: "ledger_query"
+    file: "mcp_server/tools/tool_ledger_query.py"
+    description: "Inspect the existing SQLite surplus ledger surface without mutating it."
+    inputs: ["element_id?", "sqlite_path?"]
+    output: "LedgerQueryReport"
+
+  - name: "rollback_status"
+    module: "mcp_server.tools.tool_rollback_status"
+    callable: "rollback_status"
+    file: "mcp_server/tools/tool_rollback_status.py"
+    description: "Evaluate rollback trigger status through the MCP nervous system."
+    inputs: ["L_Phi?", "consecutive_failures?", "fail_rate_60s?", "diff_score?", "threshold?", "operator_halt?"]
+    output: "RollbackStatusReport"
+
+  - name: "normative_record_query"
+    module: "mcp_server.tools.tool_normative_record_query"
+    callable: "normative_record_query"
+    file: "mcp_server/tools/tool_normative_record_query.py"
+    description: "Inspect the local normative record ledger through the MCP nervous system."
+    inputs: ["record_id?", "limit?"]
+    output: "NormativeRecordQueryReport"
+
+  - name: "surface_levers"
+    module: "mcp_server.tools.tool_surface_levers"
+    callable: "surface_levers"
+    file: "mcp_server/tools/tool_surface_levers.py"
+    description: "Return the current lever-branch manifest and candidate actions."
+    inputs: []
+    output: "LeverManifestReport"
+
+  - name: "create_lever_branch"
+    module: "mcp_server.tools.tool_create_lever_branch"
+    callable: "create_lever_branch"
+    file: "mcp_server/tools/tool_create_lever_branch.py"
+    description: "Create and validate a new lever branch under the Phase Mirror strategy."
+    verify_integrity: false
+    critical: true
+    inputs: ["branch_name", "base_branch?", "existing_branch_count?", "max_concurrent?", "dependencies?", "metadata_json?"]
+    output: "LeverBranchCreateReport"
+
+  - name: "certify_lever_convergence"
+    module: "mcp_server.tools.tool_certify_lever_convergence"
+    callable: "certify_lever_convergence"
+    file: "mcp_server/tools/tool_certify_lever_convergence.py"
+    description: "Certify that the specified lever branch converged and is safe for promotion."
+    verify_integrity: false
+    critical: true
+    inputs: ["branch_name", "wac", "wac_threshold?", "metadata_json?"]
+    output: "LeverConvergenceReport"
+
+  - name: "deploy_authorization"
+    module: "mcp_server.tools.tool_deploy_authorization"
+    callable: "deploy_authorization"
+    file: "mcp_server/tools/tool_deploy_authorization.py"
+    description: "Run production deployment go/no-go contract based on ADR-024 and ADR-026 principles."
+    verify_integrity: false
+    critical: true
+    inputs: []
+    output: "DeployAuthorizationReport"
+
+  - name: "remove_lever_branch"
+    module: "mcp_server.tools.tool_remove_lever_branch"
+    callable: "remove_lever_branch"
+    file: "mcp_server/tools/tool_remove_lever_branch.py"
+    description: "Remove a lever branch from the active manifest (archive on merge)."
+    verify_integrity: false
+    critical: true
+    inputs: ["branch_name"]
+    output: "LeverBranchRemoveReport"
+
+  - name: "multiplicity_create_article"
+    module: "mcp_server.tools.tool_multiplicity_create_article"
+    callable: "multiplicity_create_article"
+    file: "mcp_server/tools/tool_multiplicity_create_article.py"
+    description: "Create or update a Multiplicity knowledge article in storage."
+    verify_integrity: true
+    critical: true
+    inputs: ["article_path", "content"]
+    output: "MultiplicityCreateArticleReport"
+
+  - name: "multiplicity_validate_article"
+    module: "mcp_server.tools.tool_multiplicity_validate_article"
+    callable: "multiplicity_validate_article"
+    file: "mcp_server/tools/tool_multiplicity_validate_article.py"
+    description: "Validate a Multiplicity article through the knowledge parser package."
+    verify_integrity: true
+    critical: true
+    inputs: ["article_path"]
+    output: "MultiplicityValidateArticleReport"
+
+  - name: "multiplicity_execute_article"
+    module: "mcp_server.tools.tool_multiplicity_execute_article"
+    callable: "multiplicity_execute_article"
+    file: "mcp_server/tools/tool_multiplicity_execute_article.py"
+    description: "Execute a Multiplicity article through the recursive engine stub (placeholder)."
+    verify_integrity: true
+    critical: true
+    inputs: ["article_path", "context_json?"]
+    output: "MultiplicityExecuteArticleReport"
+
+  - name: "rollback_execute"
+    module: "mcp_server.tools.tool_rollback_execute"
+    callable: "rollback_execute"
+    file: "mcp_server/tools/tool_rollback_execute.py"
+    description: "Attempt rollback execution through the MCP nervous system, preserving kill-switch fallback on blocked restore."
+    verify_integrity: true
+    critical: true
+    inputs: ["L_Phi?", "consecutive_failures?", "fail_rate_60s?", "diff_score?", "threshold?", "operator_halt?", "snapshot_id?", "checkpoint_id?"]
+
+  # ── ADR-037 Wave 1 Tools ──────────────────────────────────────────────
+
+  - name: "wave1_health_check"
+    module: "mcp_server.tools.tool_wave1_health_check"
+    callable: "wave1_health_check"
+    file: "mcp_server/tools/tool_wave1_health_check.py"
+    description: "ADR-037 runtime health: kappa_n, entropy, gates, halt status."
+    inputs: []
+    output: "HealthCheckResponse"
+
+  - name: "wave1_manifest_status"
+    module: "mcp_server.tools.tool_wave1_manifest_status"
+    callable: "wave1_manifest_status"
+    file: "mcp_server/tools/tool_wave1_manifest_status.py"
+    description: "ADR-037 runtime manifest: cycle, step, pending ops, gate map."
+    inputs: []
+    output: "ManifestStatusResponse"
+
+  - name: "wave1_request_cycle"
+    module: "mcp_server.tools.tool_wave1_request_cycle"
+    callable: "wave1_request_cycle"
+    file: "mcp_server/tools/tool_wave1_request_cycle.py"
+    description: "ADR-037 request a Phoenix cycle execution."
+    verify_integrity: true
+    critical: true
+    inputs: ["cycle_n"]
+    output: "RequestCycleResponse"
+
+  - name: "wave1_request_rollback"
+    module: "mcp_server.tools.tool_wave1_request_rollback"
+    callable: "wave1_request_rollback"
+    file: "mcp_server/tools/tool_wave1_request_rollback.py"
+    description: "ADR-037 request rollback to a previous checkpoint."
+    verify_integrity: true
+    critical: true
+    inputs: ["target_checkpoint?"]
+    output: "RequestRollbackResponse"
+    output: "RollbackExecutionReport"

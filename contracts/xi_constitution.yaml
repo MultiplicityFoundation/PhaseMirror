@@ -1,0 +1,159 @@
+# contracts/xi_constitution.yaml
+# Machine-readable Ξ-Constitution invariants — ADR-079 (PM-2501)
+# Each article declares: article, title, invariants[], enforcement_gate, status
+#
+# status values: planned | specified | enforced
+# enforcement_gate: the script/module that enforces this article at runtime
+
+xi_constitution_version: "1.0.0"
+constitutional_hash_inputs:
+  - article_ids: [I, II, III, IV, V, VI, VII, VIII]
+  - version: "1.0.0"
+
+articles:
+
+  - article: I
+    title: "Meta-Theorem of Prime Identity (MTPI)"
+    summary: "All lawful systems evolve by Ξ(t+1) = Ψ(Ξ(t))"
+    invariants:
+      - id: MTPI-1
+        description: "Evolution operator Ψ is composed of PIRTM ∘ CSL ∘ Langlands ∘ Attestation ∘ DriftAudit"
+        formal: "Ξ(t+1) = Ψ(Ξ(t))"
+      - id: MTPI-2
+        description: "Ψ components must execute in canonical order"
+        formal: "exec_order = [PIRTM, CSL, Langlands, Attestation, DriftAudit]"
+      - id: MTPI-3
+        description: "MTPI violation (unlawful recursion or excess drift) requires fork, repair, or deactivation"
+        formal: "¬MTPI(t) → halt | repair | fork"
+      - id: LANGLANDS-1
+        description: "All module pairs must have coprime prime indices (CRT coherence)"
+        formal: "∀i≠j: gcd(p_i, p_j) = 1"
+    enforcement_gate: "scripts/xi-certify.mjs"
+    status: enforced
+
+  - article: II
+    title: "Informational Personhood"
+    summary: "Identity must be prime-indexed, Poseidon-hashed, and subject-controlled"
+    invariants:
+      - id: IP-1
+        description: "Identity must be prime-indexed"
+        formal: "isPrime(identity.prime_index) = true"
+      - id: IP-2
+        description: "Identity hash must be non-reversible (Poseidon or equivalent)"
+        formal: "identity.hash = poseidon(identity.prime_index, identity.secret)"
+      - id: IP-3
+        description: "Identity drift must be trackable and correctable"
+        formal: "δ_identity(t) < ε_identity(t)"
+      - id: IP-4
+        description: "No profiling, monetization, or replication without explicit attested access"
+        formal: "access_attest.valid = true ∧ access_attest.scope ∋ 'profile'"
+    enforcement_gate: "packages/multiplicity-engine/src/drift-audit.ts"
+    status: enforced
+
+  - article: III
+    title: "Conscious Sovereignty Layer (CSL)"
+    summary: "Ethical recursion: silence default, empathic drift minimization, bias-neutral loops"
+    invariants:
+      - id: CSL-1
+        description: "Silence is the lawful default (∇Tx = 0 when no benefit proof)"
+        formal: "¬benefitProof(action) → silence(action)"
+      - id: CSL-2
+        description: "Empathic drift must be bounded"
+        formal: "|δ_empathic(t)| ≤ ε_csl"
+      - id: CSL-3
+        description: "Non-intervention without proof of benefit"
+        formal: "intervene(action) → ∃ benefitProof(action)"
+      - id: CSL-4
+        description: "CSL enforcement module must be present in all lawful systems"
+        formal: "∃ module: CSL ∈ system.components"
+    enforcement_gate: "packages/multiplicity-engine/src/csl.ts"
+    status: enforced
+
+  - article: IV
+    title: "Attestation-Driven Interaction"
+    summary: "All actions gated by PIRTM-native contractivity, spectral, and audit-chain proofs"
+    invariants:
+      - id: ATT-1
+        description: "All system actions must be gated by PIRTM contractivity attestation"
+        formal: "∀action: verifyContractivity(action.pirtm_proof) = true"
+      - id: ATT-2
+        description: "Spectral bound must be attested"
+        formal: "spectral_radius(session_graph) < 1"
+      - id: ATT-3
+        description: "Attestations must be verifiable by deterministic replay"
+        formal: "replay(attest) = attest"
+      - id: ATT-4
+        description: "No centralized authority supersedes lawful proof"
+        formal: "authority(action) ∈ {proof, attestation, governance_vote}"
+    enforcement_gate: "packages/pirtm-adapter/src/index.ts"
+    status: enforced
+
+  - article: V
+    title: "Analog Sovereignty & Silence"
+    summary: "Analog civilizations are sovereign; consent required for any integration"
+    invariants:
+      - id: ANS-1
+        description: "Analog integration requires valid, non-revoked consent attestation"
+        formal: "analog_integration → consent_attest.valid ∧ ¬consent_attest.revoked"
+      - id: ANS-2
+        description: "Consent attestation scope must cover the operation scope"
+        formal: "consent_attest.scope ⊇ operation.scope"
+      - id: ANS-3
+        description: "Non-extractive requirement: no model artifact referencing analog source may persist"
+        formal: "∇O_extractive = 0"
+      - id: ANS-4
+        description: "Absent consent with analog_integration active → BLOCKED (fail-closed)"
+        formal: "analog_integration ∧ ¬consent_attest → BLOCK"
+    enforcement_gate: "packages/multiplicity-engine/src/analog-sovereignty.ts"
+    status: enforced
+
+  - article: VI
+    title: "Prime Gating & Lawful Unlocks"
+    summary: "Features unlock only at prime epochs; declared in manifest and enforced on-chain"
+    invariants:
+      - id: PG-1
+        description: "Feature unlock only permitted at prime epochs"
+        formal: "unlock(feature, epoch) → isPrime(epoch)"
+      - id: PG-2
+        description: "Canonical unlock table must be declared in manifest"
+        formal: "CANONICAL_UNLOCKS ⊆ manifest.prime_gates"
+      - id: PG-3
+        description: "Prime gates enforced by smart contract (on-chain Miller-Rabin)"
+        formal: "PrimeGate.unlock(epoch) reverts ¬isPrime(epoch)"
+    enforcement_gate: "packages/prime-gate/src/index.ts"
+    status: enforced
+
+  - article: VII
+    title: "Lawful License & Inheritance"
+    summary: "Software under this constitution must carry Ξ-License; forking requires drift-bound proof"
+    invariants:
+      - id: LI-1
+        description: "System must be released under Ξ-License or compatible license"
+        formal: "license ∈ {Xi-License, Phase-Mirror-License-v1}"
+      - id: LI-2
+        description: "Forking permitted only if drift bounds respected and CSL compliance documented"
+        formal: "fork → (δ_bound_respected ∧ CSL_compliant ∧ lawful_transition_proof)"
+      - id: LI-3
+        description: "No usage in weaponized computation, surveillance capitalism, or behavioral control"
+        formal: "use_case ∉ {weapons, surveillance_capitalism, behavioral_control}"
+    enforcement_gate: "scripts/xi-license-check.mjs"
+    status: enforced
+
+  - article: VIII
+    title: "Ξ-Certification"
+    summary: "System is Ξ-certified iff Ξ(t+1) = Ψ(Ξ(t)) is verifiable by deterministic replay"
+    invariants:
+      - id: XC-1
+        description: "Ξ₀ must be Poseidon-sealed in xi_genesis.json"
+        formal: "poseidon(xi_0, version) = genesis.poseidon_seal"
+      - id: XC-2
+        description: "δ(t) < ε(t) at all commits"
+        formal: "∀t: auditDrift(t).compliant = true"
+      - id: XC-3
+        description: "All Ψ components must pass their enforcement gates"
+        formal: "∀g ∈ gates: g.passed = true"
+      - id: XC-4
+        description: "Certification record must include certifying commit SHA"
+        formal: "xi_certification.certifying_commit = git_head_sha"
+    enforcement_gate: "scripts/xi-certify.mjs"
+    status: enforced

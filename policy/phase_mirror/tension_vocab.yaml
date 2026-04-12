@@ -1,0 +1,39 @@
+# Phase Mirror Governance Vocabulary - Tension Levels
+# Per ADR-011: Dissonance tension specifications for lever branch protocol
+# This file is immutable; modifications require governance action and Merkle root update
+
+tension_vocab:
+  exploration:
+    level: 0.0
+    description: Exploration and experimentation branches
+  optimization:
+    level: 0.5
+    description: Performance and optimization work
+  migration:
+    level: 1.0
+    description: Major migration and breaking changes
+
+tension_definitions:
+  - id: LEGITIMACY_PREDICATE_FAILED
+    description: "Enforcement bits legitimacy check failed"
+    score_weight: 2.0
+    severity: auto_fail
+    auto_fail: true
+    suppress_on_triggers: []
+
+  - id: GOVERNANCE_VERSION_INCOMPATIBLE
+    description: "Target state governance_version is incompatible with the current epoch"
+    score_weight: 0.2
+    severity: high
+    auto_fail: false
+    suppress_on_triggers:
+      - L_Phi_breach
+      - kill_switch
+      - emergency_rollback
+    note: |
+      Governance version mismatch is a policy concern rather than a safety constraint.
+      Emergency rollback may suppress this tension in audit-only mode so that recovery can proceed.
+
+threshold:
+  kill_switch: 1.0
+
