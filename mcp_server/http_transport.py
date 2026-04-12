@@ -7,12 +7,14 @@ load balancer) can serve any request without coordination.
 
 Endpoints
 ---------
-GET  /health                   — Load-balancer health probe (no DB call, <10 ms)
-GET  /tools                    — List all registered tools
-POST /call/{tool_name}         — Dispatch a tool call (JSON body)
-GET  /.well-known/mcp          — Discovery document (F-03)
-GET  /.well-known/mcp-card.json — Server card (F-04, if identity module present)
-GET  /call/{tool_name}/stream  — SSE streaming endpoint for large results
+GET  /health                        — Load-balancer health probe (no DB call, <10 ms)
+GET  /tools                         — List all registered tools
+POST /call/{tool_name}              — Dispatch a tool call (JSON body)
+GET  /.well-known/mcp               — Discovery document (F-03)
+GET  /.well-known/mcp-card.json     — Server card (F-04, if identity module present)
+GET  /call/{tool_name}/stream       — SSE streaming endpoint for large results
+POST /governance/proof-anchor       — Record HQ proof-anchor in AuditLedger
+                                      (GOVERNANCE-BRIDGE.md v0.1 condition 3)
 
 Per Gate F L0 invariant 3, every call goes through the auth layer (F-02).
 
@@ -62,6 +64,30 @@ if _FASTAPI_AVAILABLE:
 
         token: Optional[str] = None  # Bearer token (OAuth 2.1)
         args: Dict[str, Any] = {}
+
+    class ProofAnchorRequest(BaseModel):  # GOVERNANCE-BRIDGE.md v0.1
+        """Request body for POST /governance/proof-anchor.
+
+        Receives an HQ MultiplicityProofEnvelope pi_native commitment and
+        records it as a hash-chained entry in the MVP AuditLedger, satisfying
+        GOVERNANCE-BRIDGE.md v0.1 condition 3.
+
+        Fields
+        ------
+        pi_native:
+            256-bit field element from the HQ proof envelope.
+            Must be ``0x`` followed by exactly 64 hex characters.
+        circuit:
+            Circuit name that produced the proof
+            (e.g. ``"root"``, ``"recovery"``, ``"millerRabin"``, ``"deviceAttest"``).
+        proposal_id:
+            The governance proposal this proof covers.  Used as the
+            AuditLedger ``evaluation_id`` for cross-referencing.
+        """
+
+        pi_native: str
+        circuit: str
+        proposal_id: str
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +243,55 @@ class MCPHTTPServer:
                     "Cache-Control": "no-cache",
                     "X-Accel-Buffering": "no",
                 },
+            )
+
+        # ------------------------------------------------------------------
+        # GOVERNANCE-BRIDGE.md v0.1 — HQ → MVP proof-anchor endpoint
+        # ------------------------------------------------------------------
+
+        @app.post("/governance/proof-anchor")
+        async def governance_proof_anchor(body: "ProofAnchorRequest") -> JSONResponse:  # type: ignore[name-defined]
+            """Record an HQ MultiplicityProofEnvelope pi_native in the AuditLedger.
+
+            Satisfies GOVERNANCE-BRIDGE.md v0.1 condition 3:
+              'Its pi_native is recorded in the MVP AuditLedger as a
+               PROOF_ANCHOR entry.'
+
+            Returns
+            -------
+            200  {tx_id: int, entry_hash: str}
+            422  pi_native format invalid
+            500  ledger write failure
+            """
+            from governance.ledger import (
+                _validate_pi_native,
+                get_phase_mirror_audit_ledger,
+            )
+
+            # Validate pi_native format early — return 422 before touching ledger.
+            try:
+                _validate_pi_native(body.pi_native)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
+
+            try:
+                ledger = get_phase_mirror_audit_ledger()
+                entry = ledger.append_proof_anchor(
+                    pi_native=body.pi_native,
+                    circuit=body.circuit,
+                    proposal_id=body.proposal_id,
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Ledger write failed: {exc}",
+                )
+
+            return JSONResponse(
+                {
+                    "tx_id": entry.sequence_num,
+                    "entry_hash": entry.entry_hash,
+                }
             )
 
 

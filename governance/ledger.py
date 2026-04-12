@@ -14,8 +14,28 @@ from typing import Optional, Any
 import json
 import hashlib
 import os
+import re
 from enum import Enum
 from uuid import uuid4
+
+
+# ---------------------------------------------------------------------------
+# Proof-anchor validation
+# ---------------------------------------------------------------------------
+
+_PI_NATIVE_RE = re.compile(r'^0x[0-9a-fA-F]{64}$')
+
+
+def _validate_pi_native(value: str) -> None:
+    """Raise ValueError if *value* is not a valid pi_native hex string.
+
+    Valid format: ``0x`` followed by exactly 64 hex characters (256-bit field
+    element, matching the HQ MultiplicityProofEnvelope convention).
+    """
+    if not _PI_NATIVE_RE.match(value):
+        raise ValueError(
+            f"proof_anchor must be '0x' + 64 hex chars, got: {value!r}"
+        )
 
 
 class LedgerEntryType(Enum):
@@ -23,6 +43,7 @@ class LedgerEntryType(Enum):
     GOVERNANCE_ROOT_COMMIT = "GOVERNANCE_ROOT_COMMIT"
     GOVERNANCE_ACTION = "GOVERNANCE_ACTION"
     AUDIT_LOG = "AUDIT_LOG"
+    PROOF_ANCHOR = "PROOF_ANCHOR"
 
 
 @dataclass
@@ -114,14 +135,14 @@ class GovernanceRootCommit:
 
 class LedgerStore:
     """In-memory governance ledger for Merkle root tracking.
-    
+
     In production, this would be backed by a durable store (database, filesystem, etc).
     For testing and startup verification, an in-memory store is sufficient.
     """
 
     def __init__(self, storage_path: Optional[Path] = None):
         """Initialize ledger.
-        
+
         Args:
             storage_path: Optional path for persistent storage.
                 If None, uses in-memory store only.
@@ -129,7 +150,7 @@ class LedgerStore:
         self.storage_path = storage_path
         self._entries: dict[int, GovernanceRootCommit] = {}
         self._next_id = 1
-        
+
         if storage_path and storage_path.exists():
             self._load_from_disk()
 
@@ -137,7 +158,7 @@ class LedgerStore:
         """Load entries from disk storage."""
         if not self.storage_path or not self.storage_path.exists():
             return
-        
+
         try:
             with open(self.storage_path, 'r') as f:
                 data = json.load(f)
@@ -152,7 +173,7 @@ class LedgerStore:
         """Save entries to disk storage."""
         if not self.storage_path:
             return
-        
+
         try:
             self.storage_path.parent.mkdir(parents=True, exist_ok=True)
             data = {
@@ -166,30 +187,30 @@ class LedgerStore:
 
     def create_entry(self, entry: GovernanceRootCommit) -> int:
         """Create a new ledger entry.
-        
+
         Args:
             entry: The entry to create
-            
+
         Returns:
             Transaction ID assigned to the entry
         """
         tx_id = self._next_id
         self._next_id += 1
-        
+
         # Set timestamp if not set
         if not entry.timestamp:
             entry.timestamp = datetime.utcnow().isoformat() + "Z"
-        
+
         self._entries[tx_id] = entry
         self._save_to_disk()
         return tx_id
 
     def get_entry(self, tx_id: int) -> Optional[GovernanceRootCommit]:
         """Fetch entry by transaction ID.
-        
+
         Args:
             tx_id: Transaction ID
-            
+
         Returns:
             Entry if found, None otherwise
         """
@@ -197,7 +218,7 @@ class LedgerStore:
 
     def get_latest_root_commit(self) -> Optional[tuple[int, GovernanceRootCommit]]:
         """Get the latest (highest tx_id) root commit entry.
-        
+
         Returns:
             (tx_id, entry) tuple if found, None otherwise
         """
@@ -206,17 +227,17 @@ class LedgerStore:
             for tx_id, entry in self._entries.items()
             if entry.type == LedgerEntryType.GOVERNANCE_ROOT_COMMIT.value
         ]
-        
+
         if not root_commits:
             return None
-        
+
         # Sort by tx_id, return the latest
         root_commits.sort(key=lambda x: x[0])
         return root_commits[-1]
 
     def list_entries(self) -> list[tuple[int, GovernanceRootCommit]]:
         """List all entries in order.
-        
+
         Returns:
             List of (tx_id, entry) tuples sorted by tx_id
         """
@@ -234,10 +255,10 @@ def create_governance_root_commit(
     previous_root_tx_id: Optional[int] = None,
 ) -> GovernanceRootCommit:
     """Create a governance root commit entry.
-    
+
     Utility function to create a proper GovernanceRootCommit with
     file hash records for audit trail.
-    
+
     Args:
         merkle_root: The computed Merkle root hash
         immutable_files: List of paths to immutable files
@@ -247,12 +268,12 @@ def create_governance_root_commit(
         signed_by: User or governance key identifier
         notes: Human-readable governance notes
         previous_root_tx_id: If this is an update, the previous tx_id
-        
+
     Returns:
         GovernanceRootCommit entry ready for ledger
     """
     from contracts.shared.merkle_root import governance_root_hash_details
-    
+
     file_records = []
     seen_paths: set[str] = set()
     all_files = list(immutable_files)
@@ -289,7 +310,7 @@ def create_governance_root_commit(
                     hash_semantics="error",
                 )
             )
-    
+
     return GovernanceRootCommit(
         governance_version=governance_version,
         merkle_root=merkle_root,
@@ -313,11 +334,19 @@ class AuditLedgerEntry:
     payload_hash: str = ""
     entry_hash: str = ""
     type: str = LedgerEntryType.AUDIT_LOG.value
+    # ---------------------------------------------------------------------------
+    # GOVERNANCE-BRIDGE.md v0.1: optional HQ proof anchor
+    # When set, this entry records that a MultiplicityProofEnvelope pi_native
+    # commitment has been received for the associated proposal_id.  The value
+    # must be ``0x`` + 64 hex characters (256-bit field element).  Validated
+    # in AuditLedger.validate() and by _validate_pi_native().
+    # ---------------------------------------------------------------------------
+    proof_anchor: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         report_payload = self.report.to_dict() if hasattr(self.report, "to_dict") else self.report
         all_tensions = self.report.get_all_tensions() if hasattr(self.report, "get_all_tensions") else ()
-        return {
+        result: dict[str, Any] = {
             "type": self.type,
             "sequence_num": self.sequence_num,
             "evaluation_id": self.evaluation_id,
@@ -333,6 +362,9 @@ class AuditLedgerEntry:
                 "all_tension_ids": [signal.signal_id for signal in all_tensions],
             },
         }
+        if self.proof_anchor is not None:
+            result["proof_anchor"] = self.proof_anchor
+        return result
 
 
 class AuditLedger:
@@ -352,7 +384,10 @@ class AuditLedger:
         timestamp: str | None = None,
         evaluation_id: str | None = None,
         persist: bool | None = None,
+        proof_anchor: str | None = None,
     ) -> AuditLedgerEntry:
+        if proof_anchor is not None:
+            _validate_pi_native(proof_anchor)
         sequence_num = len(self.entries) + 1
         resolved_timestamp = timestamp or (datetime.utcnow().isoformat() + "Z")
         report_payload = report.to_dict() if hasattr(report, "to_dict") else report
@@ -377,12 +412,49 @@ class AuditLedger:
             prev_hash=prev_hash,
             payload_hash=payload_hash,
             entry_hash=entry_hash,
+            proof_anchor=proof_anchor,
         )
         self.entries.append(entry)
         should_persist = persist if persist is not None else (self.location is not None)
         if should_persist and self.location is not None:
             self.save()
         return entry
+
+    def append_proof_anchor(
+        self,
+        *,
+        pi_native: str,
+        circuit: str,
+        proposal_id: str,
+        timestamp: str | None = None,
+    ) -> AuditLedgerEntry:
+        """Record an HQ proof-anchor event as a hash-chained ledger entry.
+
+        Called by ``POST /governance/proof-anchor`` in the MCP server.
+        Satisfies GOVERNANCE-BRIDGE.md v0.1 condition 3.
+
+        Args:
+            pi_native:   ``0x`` + 64-hex-char field element from HQ envelope.
+            circuit:     Circuit name (e.g. ``"root"``, ``"recovery"``).
+            proposal_id: The proposal this proof covers.
+            timestamp:   Optional ISO-8601 override; defaults to utcnow.
+
+        Returns:
+            The appended ``AuditLedgerEntry``.
+        """
+        _validate_pi_native(pi_native)
+        report = {
+            "kind": "PROOF_ANCHOR",
+            "pi_native": pi_native,
+            "circuit": circuit,
+            "metadata": {"evaluation_id": proposal_id},
+        }
+        return self.append(
+            report,
+            evaluation_id=proposal_id,
+            timestamp=timestamp,
+            proof_anchor=pi_native,
+        )
 
     def query_by_id(self, evaluation_id: str) -> Optional[AuditLedgerEntry]:
         for entry in self.entries:
@@ -403,6 +475,10 @@ class AuditLedger:
     def validate(self) -> bool:
         prev_hash = ""
         for entry in self.entries:
+            # Validate proof_anchor format if present
+            if entry.proof_anchor is not None:
+                _validate_pi_native(entry.proof_anchor)
+
             report_payload = entry.report.to_dict() if hasattr(entry.report, "to_dict") else entry.report
             payload_json = json.dumps(report_payload, sort_keys=True)
             expected_payload_hash = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
@@ -466,6 +542,7 @@ class AuditLedger:
                 prev_hash=str(row.get("prev_hash", "")),
                 entry_hash=str(row.get("entry_hash", "")),
                 type=str(row.get("type", LedgerEntryType.AUDIT_LOG.value)),
+                proof_anchor=row.get("proof_anchor"),  # None if absent (old entries)
             )
             ledger.entries.append(entry)
 
